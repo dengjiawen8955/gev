@@ -172,11 +172,13 @@ func (c *Connection) HandleEvent(fd int, events poller.Event) {
 		_ = c.activeTime.Swap(time.Now().Unix())
 	}
 
+	// 处理错误事件, 关闭连接
 	if events&poller.EventErr != 0 {
 		c.handleClose(fd)
 		return
 	}
 
+	// 处理写事件
 	if !c.outBuffer.IsEmpty() {
 		if events&poller.EventWrite != 0 {
 			// if return true, it means closed
@@ -189,6 +191,7 @@ func (c *Connection) HandleEvent(fd int, events poller.Event) {
 			}
 		}
 	} else if events&poller.EventRead != 0 {
+		// 处理读事件
 		// if return true, it means closed
 		if c.handleRead(fd) {
 			return
@@ -203,6 +206,9 @@ func (c *Connection) HandleEvent(fd int, events poller.Event) {
 	c.outBufferLen.Swap(int64(c.outBuffer.Length()))
 }
 
+// 协议解码 UnPacket -> 协议处理 OnMessage -> 返回的数据编码 Packet
+// @param tmpBuffer 临时 buffer, 用于存储返回的数据
+// @param buffer 已经读取好的 buffer
 func (c *Connection) handlerProtocol(tmpBuffer *[]byte, buffer *ringbuffer.RingBuffer) {
 	ctx, receivedData := c.protocol.UnPacket(c, buffer)
 	for ctx != nil || len(receivedData) != 0 {
@@ -210,13 +216,15 @@ func (c *Connection) handlerProtocol(tmpBuffer *[]byte, buffer *ringbuffer.RingB
 		if sendData != nil {
 			*tmpBuffer = append(*tmpBuffer, c.protocol.Packet(c, sendData)...)
 		}
-
+		// 如果有多个数据包，继续解析处理
 		ctx, receivedData = c.protocol.UnPacket(c, buffer)
 	}
 }
 
+// 处理读事件
 func (c *Connection) handleRead(fd int) (closed bool) {
 	// TODO 避免这次内存拷贝
+	// 将数据读取到 buf
 	buf := c.loop.PacketBuf()
 	n, err := unix.Read(c.fd, buf)
 	if n == 0 || err != nil {
@@ -227,21 +235,27 @@ func (c *Connection) handleRead(fd int) (closed bool) {
 		return
 	}
 
+	// read buffer 读完了
 	if c.inBuffer.IsEmpty() {
+		// 将 buf 中的数据写入 buffer
 		c.buffer.WithData(buf[:n])
 		buf = buf[n:n]
+		// 协议解码 UnPacket -> 协议处理 OnMessage -> 返回的数据编码 Packet
 		c.handlerProtocol(&buf, c.buffer)
 
 		if !c.buffer.IsEmpty() {
 			first, _ := c.buffer.PeekAll()
 			_, _ = c.inBuffer.Write(first)
 		}
-	} else {
+	} else { // read buffer 还有数据
+		// 将 buf 中的数据写入 read buffer
 		_, _ = c.inBuffer.Write(buf[:n])
 		buf = buf[:0]
+		// 协议解码 UnPacket -> 协议处理 OnMessage -> 返回的数据编码 Packet
 		c.handlerProtocol(&buf, c.inBuffer)
 	}
 
+	// 将返回的数据发送写给客户端 fd
 	if len(buf) != 0 {
 		closed = c.sendInLoop(buf)
 	}

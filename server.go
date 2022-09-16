@@ -21,16 +21,18 @@ type Handler interface {
 
 // Server gev Server
 type Server struct {
-	listener  *listener
-	workLoops []*eventloop.EventLoop
-	callback  Handler
+	listener  *listener              // 监听的主 Reactor
+	workLoops []*eventloop.EventLoop // worker Reactor
+	callback  Handler                // 用户定义的 Handler 函数
 
-	timingWheel *timingwheel.TimingWheel
-	opts        *Options
-	running     atomic.Bool
+	timingWheel *timingwheel.TimingWheel // 类似 kafka 中的层级定时器
+	opts        *Options                 // Options 配置
+	running     atomic.Bool              // 状态是否为正在运行
 }
 
 // NewServer 创建 Server
+// @param handler 用户定义的 Handler 处理逻辑
+// @param opts 配置
 func NewServer(handler Handler, opts ...Option) (server *Server, err error) {
 	if handler == nil {
 		return nil, errors.New("handler is nil")
@@ -76,10 +78,13 @@ func (s *Server) RunEvery(d time.Duration, f func()) *timingwheel.Timer {
 }
 
 func (s *Server) handleNewConnection(fd int, sa unix.Sockaddr) {
+	// 通过负载均衡找到一个 worker
 	loop := s.opts.Strategy(s.workLoops)
 
+	// 创建连接
 	c := NewConnection(fd, loop, sa, s.opts.Protocol, s.timingWheel, s.opts.IdleTime, s.callback)
 
+	// 添加一个事件, 将连接放到 worker 里面
 	loop.QueueInLoop(func() {
 		s.callback.OnConnect(c)
 		if err := loop.AddSocketAndEnableRead(fd, c); err != nil {
@@ -89,15 +94,19 @@ func (s *Server) handleNewConnection(fd int, sa unix.Sockaddr) {
 }
 
 // Start 启动 Server
+// 在协程中启动主 Reactor 和 worker Reactor, 开始事件循环
 func (s *Server) Start() {
 	sw := sync.WaitGroupWrapper{}
+	// 启动定时器
 	s.timingWheel.Start()
 
+	// 启动 worker
 	length := len(s.workLoops)
 	for i := 0; i < length; i++ {
 		sw.AddAndRun(s.workLoops[i].Run)
 	}
 
+	// 启动主 Reactor
 	sw.AddAndRun(s.listener.Run)
 	s.running.Set(true)
 	sw.Wait()

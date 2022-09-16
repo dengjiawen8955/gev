@@ -6,17 +6,17 @@ import (
 
 // Options 服务配置
 type Options struct {
-	Network   string
-	Address   string
-	NumLoops  int
-	ReusePort bool
-	IdleTime  time.Duration
-	Protocol  Protocol
-	Strategy  LoadBalanceStrategy
+	Network   string              // 目前只支持 tcp
+	Address   string              // 监听地址
+	NumLoops  int                 // worker 的数量
+	ReusePort bool                // 是否可重用端口
+	IdleTime  time.Duration       // 最大空闲时间
+	Protocol  Protocol            // 自定义数据包的拆包解包 Pack, UnPack
+	Strategy  LoadBalanceStrategy // 负载均衡策略, 目前支持轮询和最小连接数
 
-	tick                        time.Duration
-	wheelSize                   int64
-	metricsPath, metricsAddress string
+	tick                        time.Duration // 层级时间轮的 tick
+	wheelSize                   int64         // 层级时间轮 size
+	metricsPath, metricsAddress string        // metric 指标暴露地址
 }
 
 // Option ...

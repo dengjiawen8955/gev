@@ -32,16 +32,16 @@ type EventLoop struct {
 
 // nolint
 type eventLoopLocal struct {
-	ConnCunt   atomic.Int64
-	needWake   *atomic.Bool
-	poll       *poller.Poller
-	mu         spinlock.SpinLock
-	sockets    map[int]Socket
-	packet     []byte
-	taskQueueW []func()
-	taskQueueR []func()
+	ConnCunt   atomic.Int64      // 连接数
+	needWake   *atomic.Bool      // 是否需要唤醒
+	poll       *poller.Poller    // poller linux 下由 epoll 实现
+	mu         spinlock.SpinLock // 自旋锁
+	sockets    map[int]Socket    // fd -> Socket
+	packet     []byte            // 内部使用，临时缓冲区
+	taskQueueW []func()          // 写事件队列
+	taskQueueR []func()          // 读事件队列
 
-	UserBuffer *[]byte
+	UserBuffer *[]byte // 用户缓冲区
 }
 
 // New 创建一个 EventLoop
@@ -138,8 +138,10 @@ func (l *EventLoop) QueueInLoop(f func()) {
 	}
 }
 
+// workLoops[i].Run 的回调函数
 func (l *EventLoop) handlerEvent(fd int, events poller.Event) {
 	if fd != -1 {
+		// 找到 fd 对应的 socket 调用 socket.HandleEvent
 		s, ok := l.sockets[fd]
 		if ok {
 			s.HandleEvent(fd, events)

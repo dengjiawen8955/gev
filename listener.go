@@ -15,13 +15,13 @@ import (
 // handleConnFunc 处理新连接
 type handleConnFunc func(fd int, sa unix.Sockaddr)
 
-// listener 监听TCP连接
+// listener 监听TCP连接, 作为多Reactor多线程网络模型中的主 Reactor
 type listener struct {
-	file     *os.File
-	fd       int
-	handleC  handleConnFunc
-	listener net.Listener
-	loop     *eventloop.EventLoop
+	file     *os.File             // 监听的 socket 文件
+	fd       int                  // 监听的 socket 文件 fd
+	handleC  handleConnFunc       // 处理新连接 Conn 的函数(默认是通过负载均衡交给 worker)
+	listener net.Listener         // Listener 对象
+	loop     *eventloop.EventLoop // 事件循环
 }
 
 // newListener 创建Listener
