@@ -314,10 +314,13 @@ func (c *Connection) handleClose(fd int) {
 	}
 }
 
+// 将返回的数据放到 outBuffer 中
 func (c *Connection) sendInLoop(data []byte) (closed bool) {
+	// 如果 outBuffer 为空, 直接将数据放到 outBuffer 中
 	if !c.outBuffer.IsEmpty() {
 		_, _ = c.outBuffer.Write(data)
 	} else {
+		// 如果 outBuffer 不为空, 尝试写入数据
 		n, err := unix.Write(c.fd, data)
 		if err != nil && err != unix.EAGAIN {
 			c.handleClose(c.fd)
@@ -325,12 +328,14 @@ func (c *Connection) sendInLoop(data []byte) (closed bool) {
 			return
 		}
 
+		// 把没写完的数据放到 outBuffer 中
 		if n <= 0 {
 			_, _ = c.outBuffer.Write(data)
 		} else if n < len(data) {
 			_, _ = c.outBuffer.Write(data[n:])
 		}
 
+		// 如果 outBuffer 不为空, 则注册写事件
 		if !c.outBuffer.IsEmpty() {
 			_ = c.loop.EnableReadWrite(c.fd)
 		}
