@@ -136,7 +136,6 @@ func (ep *Poller) Poll(handler func(fd int, event Event)) {
 	defer func() {
 		close(ep.waitDone)
 	}()
-
 	events := make([]unix.EpollEvent, waitEventsBegin)
 	var (
 		wake bool
@@ -144,6 +143,7 @@ func (ep *Poller) Poll(handler func(fd int, event Event)) {
 	)
 	ep.running.Set(true)
 	for {
+		// wait 等待事件并读取
 		n, err := unix.EpollWait(ep.fd, events, msec)
 		if err != nil && err != unix.EINTR {
 			log.Error("EpollWait: ", err)
@@ -155,7 +155,7 @@ func (ep *Poller) Poll(handler func(fd int, event Event)) {
 			continue
 		}
 		msec = 0
-
+		// 遍历读取的事件
 		for i := 0; i < n; i++ {
 			fd := int(events[i].Fd)
 			if fd != ep.eventFd {
@@ -169,7 +169,7 @@ func (ep *Poller) Poll(handler func(fd int, event Event)) {
 				if events[i].Events&(unix.EPOLLIN|unix.EPOLLPRI|unix.EPOLLRDHUP) != 0 {
 					rEvents |= EventRead
 				}
-
+				// 回调函数处理事件
 				handler(fd, rEvents)
 			} else {
 				ep.wakeHandlerRead()
@@ -184,7 +184,6 @@ func (ep *Poller) Poll(handler func(fd int, event Event)) {
 				return
 			}
 		}
-
 		if n == len(events) {
 			events = make([]unix.EpollEvent, n*2)
 		}

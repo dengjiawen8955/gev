@@ -28,9 +28,8 @@
 
 `gev` 只使用极少的 goroutine, 一个 goroutine 负责监听客户端连接，其他 goroutine （work 协程）负责处理已连接客户端的读写事件，work 协程数量可以配置，默认与运行主机 CPU 数量相同。
 
-<div align=center>
-<img src="benchmarks/out/reactor.png" height="300"/>
-</div>
+![](benchmarks/out/reactor.png)
+
 
 ## 性能测试
 
